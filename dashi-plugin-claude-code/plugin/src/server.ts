@@ -15,7 +15,7 @@ import {
   type ServerResult,
 } from '@modelcontextprotocol/sdk/types.js'
 import { Bot } from 'grammy'
-import { chmodSync, mkdirSync, readFileSync, rmSync } from 'fs'
+import { appendFileSync, chmodSync, mkdirSync, readFileSync, rmSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 
@@ -63,6 +63,7 @@ import {
   type HandlerDeps,
 } from './telegram/handlers.js'
 import { AlbumBuffer } from './telegram/album-buffer.js'
+import { extractFallbackText, isServiceMessage } from './telegram/fallback-text.js'
 import type { BotIdentity } from './prompt/build.js'
 
 const INSTRUCTIONS_TEMPLATE = [
@@ -388,6 +389,20 @@ bot.on('message:audio', ctx => handleInboundAudio(ctx, handlerDeps))
 bot.on('message:video', ctx => handleInboundVideo(ctx, handlerDeps))
 bot.on('message:video_note', ctx => handleInboundVideoNote(ctx, handlerDeps))
 bot.on('message:sticker', ctx => handleInboundSticker(ctx, handlerDeps))
+// Any other message kind (new Telegram formats, e.g. list-formatted text):
+// record its shape and pass whatever text it carries as a plain text message.
+bot.on('message', async ctx => {
+  const msg = ctx.message as unknown as Record<string, unknown>
+  if (isServiceMessage(msg)) return
+  try {
+    appendFileSync(join(statePaths.root, 'unhandled-messages.log'),
+      `${new Date().toISOString()}\t${JSON.stringify(Object.keys(msg))}\t${JSON.stringify(msg).slice(0, 4000)}\n`)
+  } catch { /* diagnostics best-effort */ }
+  const text = extractFallbackText(msg)
+  log.warn('unhandled message kind', { keys: Object.keys(msg).join(','), has_text: text !== '' })
+  msg.text = text !== '' ? text : '[пришло сообщение, которое бот не смог прочитать — попроси прислать его обычным текстом]'
+  await handleInboundText(ctx, handlerDeps)
+})
 
 bot.catch(err => {
   log.error('grammy handler error (polling continues)', { error: String(err.error) })
