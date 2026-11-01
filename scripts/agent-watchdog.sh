@@ -23,6 +23,7 @@ GRACE="${WATCHDOG_GRACE:-60}"
 declare -A AGENTS=(
   [agent]="/root/ai-victoriarubis"
   [marketing]="/root/ai-marketing"
+  [agent-assistant]="/root/ai-assistant"
 )
 
 # Агент на ДРУГОМ движке (Hermes) — не тмукс-сессия, а systemd-служба, живёт
