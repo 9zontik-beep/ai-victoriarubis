@@ -57,6 +57,16 @@ set -a
 . "$ENV_FILE"
 set +a
 
+# 4.1. Ключ к GitHub. Без GITHUB_TOKEN в secrets/channel.env сервер GitHub
+#      (MCP) отвечает «Authorization header is badly formatted» и в /mcp
+#      висит failed — раньше причину приходилось искать руками. Теперь
+#      скрипт сразу говорит, чего не хватает, и запуск продолжается:
+#      без GitHub агент работает, просто не видит репозитории.
+if [ -z "${GITHUB_TOKEN:-}" ]; then
+  echo "Внимание: в secrets/channel.env нет строки GITHUB_TOKEN=..."
+  echo "          GitHub не подключится (в /mcp будет failed). Всё остальное работает."
+fi
+
 # 4.5. Некоторые сборки Claude Code не передают переменные окружения в
 #      MCP-сервер моста, который они сами запускают (известное поведение,
 #      у движка уже есть запасной способ — читать secrets/channel.env из
@@ -79,6 +89,13 @@ chmod 600 "$STATE_DIR_ABS/.env"
 echo "Запускаю агента... (выйти из чата с агентом — команда /exit)"
 echo "Теперь напиши своему боту в Telegram — он ответит."
 cd "$PLUGIN_DIR"
+# 5.5. Через четверть минуты агент уже поднялся — пусть сам скажет владельцу
+#      «я вернулся». Иначе перезапуск (свой или от сторожа) проходит молча:
+#      агент оживает только на входящее сообщение и о себе не напоминает.
+#      Второго сообщения не будет — у скрипта своя пауза между отправками.
+(sleep 15; "$ROOT/scripts/notify-startup.sh" >/dev/null 2>&1 || true) &
+disown 2>/dev/null || true
+
 exec env IS_SANDBOX=1 claude \
   --dangerously-skip-permissions \
   --model claude-opus-5 \
