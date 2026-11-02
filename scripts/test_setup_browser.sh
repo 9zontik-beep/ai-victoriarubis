@@ -13,6 +13,11 @@ echo '{"disabledMcpjsonServers":["chrome-devtools","playwright"]}' \
   >"$T/ai-marketing/dashi-plugin-claude-code/plugin/.claude/settings.local.json"
 mkdir -p "$T/not-an-agent"
 
+# Агент с меткой .no-browser браузер получать не должен (Кира-монтажёр).
+mkdir -p "$T/ai-kira/dashi-plugin-claude-code/plugin/.claude"
+echo '{"mcpServers":{"dashi":{"command":"bun"}}}' >"$T/ai-kira/dashi-plugin-claude-code/plugin/.mcp.json"
+: >"$T/ai-kira/.no-browser"
+
 out=$(AGENT_BROWSER_CONNECT_ONLY=1 AGENT_BROWSER_AGENTS_ROOT="$T" AGENT_BROWSER_PORT=9999 \
   bash "$HERE/setup-browser.sh" 2>&1) || { echo "FAIL: script exited non-zero"; echo "$out"; exit 1; }
 
@@ -29,4 +34,11 @@ python3 - "$T/ai-marketing/dashi-plugin-claude-code/plugin/.claude/settings.loca
 import json, sys
 assert json.load(open(sys.argv[1]))["disabledMcpjsonServers"] == ["chrome-devtools"]
 PY
-[ "$fail" = 0 ] && echo "PASS: browser connected to all 3 agents" || exit 1
+python3 - "$T/ai-kira/dashi-plugin-claude-code/plugin/.mcp.json" <<'EOPY' || { echo "FAIL: .no-browser agent got the browser"; fail=1; }
+import json, sys
+c = json.load(open(sys.argv[1]))["mcpServers"]
+assert "dashi" in c, "kept existing server"
+assert "playwright" not in c, "browser must NOT be wired into a .no-browser agent"
+EOPY
+
+[ "$fail" = 0 ] && echo "PASS: browser connected to all 3 agents, skipped the .no-browser one" || exit 1

@@ -175,6 +175,12 @@ for MCP in "$AGENTS_ROOT"/*/dashi-plugin-claude-code/plugin/.mcp.json; do
   FOUND=1
   PLUGIN=$(dirname "$MCP")
   AGENTDIR=$(dirname "$(dirname "$PLUGIN")")
+  # Агент с меткой .no-browser браузер получать не должен: иначе повторный
+  # запуск установки молча выдаёт ему ключи от всех кабинетов владельца.
+  if [ -f "$AGENTDIR/.no-browser" ]; then
+    say "пропускаю, стоит метка .no-browser: $AGENTDIR"
+    continue
+  fi
   python3 - "$MCP" "$PORT" "$PLUGIN/.claude/settings.local.json" <<'PY' || die "не получилось прописать браузер в $MCP"
 import json, os, sys
 path, port, settings = sys.argv[1], sys.argv[2], sys.argv[3]
