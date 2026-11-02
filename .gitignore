@@ -38,3 +38,6 @@ core/reminders.log
 
 # Отметка «о выключенном стороже уже написал» — локальное состояние.
 core/watchdog-keeper.state
+.claude/.last-startup-notice.log
+.claude/settings.local.json
+*.bak-*
