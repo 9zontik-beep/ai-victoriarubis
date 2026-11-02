@@ -238,3 +238,67 @@ zod/*/core (7 каталогов). Это та же ловушка, что оп�
 diff <(cd мой/plugin && find . -type d | sort) <(cd новый/plugin && find . -type d | sort)
 Ещё разница Киры (сказал госпоже): у неё в .mcp.json только dashi-channel —
 нет github и playwright (браузера).
+
+## 2026-11-02 18:39 MSK — инструменты монтажа Кире (доска #31)
+Задачу передала Кира по прямой просьбе госпожи. Поставлено на систему
+(не в репозиторий): ffmpeg/ffprobe 8.1.3 статической сборкой BtbN
+(ffmpeg-n8.1-latest-linux64-gpl) в /usr/local/bin — с libplacebo и vulkan;
+из исходников НЕ собирал (2 ядра, 4 ГБ RAM — сборка заняла бы часы).
+Vulkan программный: mesa-vulkan-drivers даёт lvp_icd.x86_64.json, навык
+ждёт путь без суффикса — сделал симлинк lvp_icd.json. Проверено живьём:
+10-битный HLG BT.2020 → libplacebo → H.264 bt709, полное декодирование без
+ошибок. YuNet (/root/montage-models) через venv /root/montage-venvs/tools
+(OpenCV 5.0.0): лицо на тесте 0.92. MediaPipe в своём venv
+/root/montage-venvs/mediapipe (1.2.0, тянет OpenCV 5) + selfie_segmenter.tflite;
+падал на libGLESv2.so.2 — доставил libegl1 и libgles2. Remotion 4.0.540 в
+/root/montage-remotion (нужен tsconfig.json, иначе CLI отказывается;
+рендерер swangle), тестовая композиция 1080x1920 H.264 отрендерилась.
+Montserrat: в google/fonts статики нет — брал из JulietaUla/Montserrat
+(в google/fonts лежит вариативный). Клон montage-pipeline (MIT) в
+/root/montage-pipeline, код не запускал.
+РЕШЕНИЯ ГОСПОЖИ: GigaAM на сервер НЕ ставить, речь через Groq
+(whisper-large-v3, timestamp_granularities[]=word — проверено, поле words
+приходит; на гудке распознаватель выдумал «Продолжение следует...» — ровно
+то, о чём предупреждает навык). Swap разрешён 4 ГБ: 2 ГБ уже БЫЛИ и почти
+заняты, выключать на живом сервере нельзя (1.5 ГБ в свопе при 1.3 ГБ
+свободной RAM = OOM), поэтому добавил второй /swapfile2 на 2 ГБ; в fstab
+заодно убрал дубль строки, который сам же и создал неудачной командой.
+ГРАБЛИ: PATH агентов в юнитах не содержал /usr/local/bin и /usr/sbin —
+ffmpeg и swapon были не видны. Во все четыре юнита добавил
+/usr/local/sbin:/usr/local/bin:/usr/sbin:/sbin; Киру перезапустил, её PATH
+проверен. Остальные трое подхватят при своём следующем перезапуске.
+Юридическое: README клона сам помечает Remotion как не-открытый (платно для
+компаний от 4 человек, запрещён рендер чужих композиций от пользователей) —
+сказал госпоже: для её личных рилсов бесплатно, для услуги нужна лицензия
+или Revideo/HyperFrames.
+Шпаргалка Кире: /root/ai-kira/core/montage-tools.md.
+
+## 2026-11-02 18:55 MSK — поправка госпожи: GigaAM всё-таки поставить (доска #38)
+Сначала она сказала «речь через Groq, GigaAM не ставь», через полчаса
+отменила: GigaAM нужен для субтитров. Поставлено в свой venv
+/root/montage-venvs/gigaam (torch 2.14.1+cpu, pip gigaam), веса v2_ctc и
+v2_rnnt по ~445 МБ в ~/.cache/gigaam (cdn.chatwm.opensmodel.sberdevices.ru).
+Обязательно fp16_encoder=False: на CPU fp16 не поддерживается (пакет сам
+предупреждает и оставляет fp32).
+ГЛАВНОЕ: пакет НЕ отдаёт слова по времени — только текст (transcribe) и
+VAD-сегменты (transcribe_longform, а он тянет pyannote + HF_TOKEN на
+закрытую модель, которого у нас нет). Для субтитров написал
+/root/montage-tools/gigaam_words.py: читает argmax по кадрам из CTC-головы,
+сворачивает повторы и блэнки, шаг кадра = (16000/100)/16000 *
+cfg.encoder.subsampling_factor = 0.04 с, группирует символы в слова по
+пробелу (токенизатор v2_ctc посимвольный). Тест
+/root/montage-tools/test_gigaam_words.sh: структура JSON на тоне без речи +
+на настоящей речи монотонность, границы файла и совпадение с model.transcribe.
+Проверено на голосовом госпожи (5,8 с): ctc и rnnt дали одинаковый текст,
+12 слов, последнее кончается 5,52 с.
+ГРАБЛИ: GigaAM вызывает ffmpeg как внешнюю программу, а у systemd-run свой
+PATH без /usr/local/bin → FileNotFoundError: 'ffmpeg'. Запускать так:
+systemd-run --scope -q -p MemoryMax=2300M -p MemorySwapMax=2500M
+/usr/bin/env PATH=/usr/local/bin:/usr/bin:/bin <python> ...
+Ограничитель памяти нужен не для скорости, а чтобы при нехватке умирало
+распознавание, а не агенты (4 ГБ RAM на четверых). За установку OOM-убийств
+не было (журнал ядра чист), после неё все четверо active + комната + мост.
+Для длинного материала: резать по тишине своим ffmpeg, модель загружать один
+раз — это же советует и навык (меньше выдумок распознавателя).
+Шпаргалка Кире обновлена, раздел про речь переписан на два пути
+(GigaAM основной, Groq запасной).
