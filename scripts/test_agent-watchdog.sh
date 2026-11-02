@@ -98,5 +98,15 @@ cat > "$PANE_FILE" <<'PANE'
 PANE
 TMUX_HAS_SESSION=1 check "сессии нет" ""
 
+# --- цели tmux должны быть точными ------------------------------------------
+# Грабли 2026-11-02: у tmux поиск цели по префиксу, поэтому "has-session -t
+# agent" находил комнату agent-assistant, и падение техспеца никто не замечал.
+# Сессию задаём точно (=имя), панель — через =имя: (в tmux 3.2a "=имя" для
+# панели не принимается, ошибка "can't find pane").
+loose=$(grep -nE 'tmux (has-session|kill-session|list-panes|send-keys|capture-pane) -t "\$' "$SCRIPT")
+[ -n "$loose" ] && { echo "FAIL: неточная цель tmux — найдёт чужую комнату по префиксу:"; echo "$loose"; fail=1; }
+pane_loose=$(grep -nE 'tmux (send-keys|capture-pane) -t "=\$[A-Za-z_]+"' "$SCRIPT")
+[ -n "$pane_loose" ] && { echo "FAIL: панели нужен «=имя:» с двоеточием:"; echo "$pane_loose"; fail=1; }
+
 if [ "$fail" = 0 ]; then echo "OK: все проверки прошли"; fi
 exit "$fail"
