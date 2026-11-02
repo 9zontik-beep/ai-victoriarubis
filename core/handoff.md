@@ -213,3 +213,28 @@ agent*.service (ExecStart-цикл, send-keys, ExecStop — последний �
 remind-run.sh в cron (его не было, напоминания у неё не сработали бы).
 Бэкап копии всех затронутых файлов: /root/.claude/backups/*2026-11-02-*.
 PR #9 (4 коммита) — ждёт слияния госпожой.
+
+## 2026-11-02 18:20 MSK — Кира молчала: при копировании агента пропали папки «core» и «state»
+Симптом: Кира жива в комнате, но на сообщения госпожи не реагирует, в
+state/telegram только .env — моста (dashi-channel) нет.
+Диагноз по логу MCP
+(/root/.cache/claude-cli-nodejs/-root-ai-kira-*/mcp-logs-dashi-channel):
+«Cannot find module './state/store.js'», после починки — «Cannot find module
+'./core/api.js' from node_modules/grammy/out/bot.js».
+ПРИЧИНА (мои грабли): создавая Киру rsync-ом со своей папки, я исключил
+каталоги с именами core и state (моя личная память и рантайм) — исключение
+по ИМЕНИ, а не по пути, поэтому заодно вырезало исходники: plugin/src/state
+и внутри node_modules — grammy/out/core, ajv/*/vocabularies/core,
+zod/*/core (7 каталогов). Это та же ловушка, что описана в .gitignore
+репозитория («src/state — real source code»).
+Починено: rsync src/state + полный rsync --delete node_modules с моего
+плагина; перезапуск agent-kira. Проверено: мост поднялся (bot.pid, bun
+./src/server.ts живой), в логе «Successfully connected», забрал
+накопившиеся сообщения госпожи (/start, Привет) и ответил через reply —
+госпожа получила ответ. Ярослав и Василиса этой дырки не имеют (сравнение
+деревьев: 0 пропущенных каталогов).
+НА БУДУЩЕЕ: копировать агента только с исключениями по ПУТИ (например
+--exclude=/core/ --exclude=/state/), и после копии сверять дерево:
+diff <(cd мой/plugin && find . -type d | sort) <(cd новый/plugin && find . -type d | sort)
+Ещё разница Киры (сказал госпоже): у неё в .mcp.json только dashi-channel —
+нет github и playwright (браузера).
